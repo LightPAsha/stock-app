@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Stock
+Comment=Parts inventory
+Exec=/opt/stock-app/stock-app
+Icon=/opt/stock-app/stock.png
+Terminal=false
+Categories=Office;
+StartupWMClass=StockApp

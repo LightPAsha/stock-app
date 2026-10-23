@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Parts Stock</title>
+<style>
+  html,body{height:100%;margin:0}
+  body{display:grid;place-items:center;font:16px system-ui,sans-serif;background:#f4f5f2;color:#1d2320}
+  @media (prefers-color-scheme: dark){body{background:#151918;color:#e7ebe9}}
+  .box{text-align:center}
+  img{width:96px;height:96px}
+  .bar{width:220px;height:6px;border-radius:3px;background:rgba(31,162,127,.2);margin:18px auto 10px;overflow:hidden}
+  .bar i{display:block;height:100%;width:40%;background:#1fa27f;border-radius:3px;animation:go 1.2s ease-in-out infinite}
+  @keyframes go{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+  p{color:#6b736f;margin:0}
+</style>
+</head>
+<body>
+<div class="box">
+  <img src="stock.png" alt="">
+  <h2>Parts Stock</h2>
+  <div class="bar"><i></i></div>
+  <p id="msg">Starting…</p>
+</div>
+<script>
+  const URL = 'http://localhost:8080/';
+  const started = Date.now();
+  async function check() {
+    try {
+      await fetch(URL + 'api/ping', { mode: 'no-cors', cache: 'no-store' });
+      location.replace(URL);
+      return;
+    } catch (e) { /* ще не готово */ }
+    const s = Math.round((Date.now() - started) / 1000);
+    document.getElementById('msg').textContent =
+      s < 90 ? `Starting… ${s} s` : 'Taking too long to start. Check the log: ~/StockApp/stock.log';
+    setTimeout(check, 700);
+  }
+  check();
+</script>
+</body>
+</html>

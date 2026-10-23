@@ -1,0 +1,52 @@
+#!/bin/bash
+# Лаунчер "Склад": запускає програму і відкриває її в окремому вікні (як звичайну програму).
+# Закрили вікно — програма закрилась.
+
+APP_DIR=/opt/stock-app
+PORT=8080
+URL="http://localhost:$PORT"
+DATA="$HOME/StockApp"
+mkdir -p "$DATA/Excel" "$DATA/window"
+
+ping_app() { curl -fs --max-time 1 "$URL/api/ping" 2>/dev/null | grep -q stock-app; }
+
+JAVA_PID=""
+if ! ping_app; then
+  java -Xms64m -Xmx256m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xshare:auto \
+       -jar "$APP_DIR/stock-app.jar" --server.port=$PORT >/dev/null 2>&1 &
+  JAVA_PID=$!
+fi
+
+BROWSER=$(command -v chromium || command -v chromium-browser || true)
+
+if [ -z "$BROWSER" ]; then
+  # Без Chromium — просто відкриваємо у браузері за замовчуванням, коли програма стартує
+  for _ in $(seq 1 180); do ping_app && break; sleep 0.5; done
+  xdg-open "$URL"
+  [ -n "$JAVA_PID" ] && wait "$JAVA_PID"
+  exit 0
+fi
+
+# Перший запуск: Excel-файли зберігаються в ~/StockApp/Excel без зайвих запитань
+PREFS="$DATA/window/Default/Preferences"
+if [ ! -f "$PREFS" ]; then
+  mkdir -p "$DATA/window/Default"
+  cat > "$PREFS" <<EOF
+{"download":{"default_directory":"$DATA/Excel","prompt_for_download":false},
+ "browser":{"has_seen_welcome_page":true},"translate":{"enabled":false}}
+EOF
+fi
+
+# Окреме вікно без адресного рядка. Прапорці wayland-ime — щоб на сенсорному екрані з'являлась клавіатура.
+# Поки Java стартує (~20-40 c), показується заставка.
+"$BROWSER" --app="file://$APP_DIR/splash.html" \
+  --user-data-dir="$DATA/window" --class=StockApp \
+  --no-first-run --no-default-browser-check --password-store=basic \
+  --enable-wayland-ime --wayland-text-input-version=3 --lang=en-US \
+  --start-maximized >/dev/null 2>&1
+
+# Вікно закрито → зупиняємо програму (база закривається коректно)
+if [ -n "$JAVA_PID" ] && kill -0 "$JAVA_PID" 2>/dev/null; then
+  kill "$JAVA_PID"
+  wait "$JAVA_PID" 2>/dev/null
+fi

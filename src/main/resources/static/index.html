@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parts Stock</title>
+<style>
+  :root {
+    --bg: #f4f5f2; --panel: #ffffff; --ink: #1d2320; --muted: #6b736f; --line: #dfe3df;
+    --accent: #1fa27f; --accent-ink: #ffffff; --accent-soft: #dff3ec;
+    --danger: #c8443a; --danger-soft: #fbe6e3; --warn-soft: #fff1d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151918; --panel:#1e2321; --ink:#e7ebe9; --muted:#9aa39f; --line:#2f3633;
+            --accent:#2fc49a; --accent-ink:#0d1512; --accent-soft:#1d3a31; --danger:#ef6b60;
+            --danger-soft:#3d2422; --warn-soft:#3b3220; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  button { font:inherit; cursor:pointer; }
+  input { font:inherit; color:inherit; }
+
+  header { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:17px; margin:0; flex:0 0 auto; }
+  header .search { flex:1; max-width:360px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+  .btn { padding:12px 20px; font-size:17px; min-height:48px; border-radius:10px; border:1px solid var(--line); background:var(--panel); color:var(--ink); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600; }
+  .btn:disabled { opacity:.4; cursor:default; }
+  .spacer { flex:1; }
+
+  .layout { display:grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 58px); }
+
+  /* Ліва колонка — розділи */
+  nav { border-right:1px solid var(--line); background:var(--panel); padding:12px 8px; display:flex; flex-direction:column; gap:4px; }
+  nav .cat { display:flex; justify-content:space-between; align-items:center; width:100%; text-align:left;
+             padding:16px 16px; border:0; border-radius:10px; background:transparent; color:var(--ink); font-weight:600; font-size:18px; }
+  nav .cat .count { font-weight:400; color:var(--muted); font-size:13px; }
+  nav .cat.active { background:var(--accent-soft); box-shadow: inset 4px 0 0 var(--accent); }
+  nav .cat:hover:not(.active) { background:var(--bg); }
+  nav .add-cat { margin-top:8px; color:var(--muted); border:1px dashed var(--line); background:transparent; border-radius:10px; padding:14px; font-size:16px; }
+
+  /* Центр + права частина — список деталей */
+  main { padding:16px 20px; }
+  .toolbar { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .toolbar h2 { margin:0 8px 0 0; font-size:20px; }
+  .step { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; }
+  .step input { width:56px; padding:6px; border:1px solid var(--line); border-radius:6px; text-align:center; background:var(--panel); }
+
+  .parts { background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .row { display:grid; grid-template-columns: 1fr 90px auto; align-items:center; gap:12px; padding:10px 16px; border-top:1px solid var(--line); }
+  .row:first-child { border-top:0; }
+  .row.head { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; padding-top:8px; padding-bottom:8px; background:var(--bg); }
+  .row .name { font-size:17px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .name small { display:block; font-size:12px; color:var(--muted); }
+  .row .qty { font-size:22px; font-weight:700; text-align:center; font-variant-numeric:tabular-nums; }
+  .row.low .qty { color:var(--danger); }
+  .row.low { background:var(--warn-soft); }
+  .row.zero { background:var(--danger-soft); }
+  .actions { display:flex; gap:8px; }
+  .actions button { width:64px; height:58px; border-radius:10px; border:2px solid var(--ink); background:var(--panel); color:var(--ink); font-size:28px; font-weight:700; line-height:1; }
+  .actions button.plus:active { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .actions button.minus:active { background:var(--danger); border-color:var(--danger); color:#fff; }
+  .actions button.more { border-width:1px; border-color:var(--line); font-size:22px; color:var(--muted); width:48px; }
+  .empty { padding:40px; text-align:center; color:var(--muted); }
+
+  /* Діалоги */
+  dialog { border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--ink); padding:20px; width:min(420px, calc(100vw - 32px)); }
+  dialog::backdrop { background:rgba(0,0,0,.35); }
+  dialog h3 { margin:0 0 14px; }
+  dialog label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  dialog input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+  dialog .buttons { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
+  dialog .danger { color:var(--danger); border-color:var(--danger); margin-right:auto; }
+  .history { max-height:260px; overflow:auto; margin-top:12px; border-top:1px solid var(--line); }
+  .history div { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); font-size:13px; }
+  .history .pos { color:var(--accent); font-weight:600; } .history .neg { color:var(--danger); font-weight:600; }
+
+  /* Ролі: адмін бачить усе, користувач — лише + / − */
+  body:not(.admin) .admin-only { display:none !important; }
+  body.no-login #usersBtn, body.no-login #who, body.no-login #logoutBtn { display:none !important; }
+  .who { color:var(--muted); font-size:13px; white-space:nowrap; }
+  .who b { color:var(--ink); }
+  .warn-bar { background:var(--warn-soft); padding:8px 16px; border-bottom:1px solid var(--line); font-size:14px; }
+  .warn-bar button { margin-left:8px; }
+  .edit-cat { border:0; background:transparent; color:var(--muted); font-size:24px; padding:8px 14px; }
+
+  /* Прихований елемент лишається прихованим, навіть якщо правило нижче задає display */
+  [hidden] { display:none !important; }
+
+  /* Екран входу */
+  #login, #setPw { position:fixed; inset:0; background:var(--bg); display:grid; place-items:center; z-index:10; padding:16px; }
+  #login .box, #setPw .box { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:24px; width:min(420px, 100%); }
+  #login h2, #setPw h2 { margin:0 0 16px; }
+  #login .names { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+  #login .names button { padding:16px 24px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:16px; }
+  #login .names button.active { background:var(--accent-soft); border-color:var(--accent); }
+  #login input, #setPw input { width:100%; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); font-size:17px; margin-bottom:10px; }
+  #login .btn, #setPw .btn { width:100%; padding:12px; font-size:17px; }
+  #login .err, #setPw .err { color:var(--danger); min-height:20px; font-size:14px; }
+
+  /* Користувачі та імпорт */
+  .users { margin-top:6px; border-top:1px solid var(--line); max-height:300px; overflow:auto; }
+  .users .u { display:grid; grid-template-columns: 1fr auto; gap:6px 8px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); }
+  .users .u .ctrl { display:flex; gap:6px; grid-column: 1 / -1; }
+  .users .u .ctrl input { flex:1; min-width:0; }
+  dialog select { font:inherit; color:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+  .hint { font-size:13px; color:var(--muted); margin:6px 0 0; }
+  .import-block { border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:12px; }
+  .import-block h4 { margin:0 0 6px; }
+  .import-block .row-in { display:flex; gap:8px; margin-top:8px; }
+  .import-block .row-in input { flex:1; min-width:0; }
+  dialog.readonly .edit-field, dialog.readonly .edit-btn { display:none; }
+
+  .toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--ink); color:var(--bg);
+           padding:10px 16px; border-radius:8px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:calc(100vw - 32px); }
+  .toast.show { opacity:1; }
+
+  /* Телефон: розділи стають вкладками зверху */
+  @media (max-width: 700px) {
+    header { flex-wrap:wrap; }
+    header .search { order:3; max-width:none; flex-basis:100%; }
+    .layout { grid-template-columns: 1fr; }
+    nav { flex-direction:row; overflow-x:auto; border-right:0; border-bottom:1px solid var(--line); padding:8px; }
+    nav .cat { width:auto; white-space:nowrap; gap:8px; }
+    nav .cat.active { box-shadow: inset 0 -3px 0 var(--accent); }
+    nav .add-cat { margin:0; white-space:nowrap; }
+    main { padding:12px; }
+    .row { grid-template-columns: 1fr 56px auto; padding:10px 12px; gap:8px; }
+    .actions button.more { display:none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>📦 Stock</h1>
+  <input class="search" id="search" type="search" placeholder="Search parts in all sections…">
+  <span class="spacer"></span>
+  <button class="btn admin-only" id="importBtn" title="Load stock from Google Sheets or Excel">⬆ Import</button>
+  <button class="btn" id="exportBtn" title="Export stock to Excel / Google Sheets">⬇ Export</button>
+  <button class="btn admin-only" id="usersBtn">👤 Users</button>
+  <span class="who" id="who"></span>
+  <button class="btn" id="logoutBtn" title="Sign out">↩ Sign out</button>
+  <button class="btn" id="quitBtn" title="Close the app">⏻</button>
+</header>
+
+<div class="layout">
+  <nav id="cats"></nav>
+  <main>
+    <div class="toolbar">
+      <h2 id="title">—</h2>
+      <button class="edit-cat admin-only" id="editCatBtn" title="Rename / delete section">✎</button>
+      <button class="btn primary admin-only" id="addPartBtn">+ Part</button>
+      <span class="spacer"></span>
+      <label class="step">Step <input id="step" type="number" min="1" value="1"></label>
+    </div>
+    <div class="parts" id="parts"></div>
+  </main>
+</div>
+
+<!-- Нова / редагування деталі -->
+<dialog id="partDlg">
+  <form method="dialog" id="partForm">
+    <h3 id="partDlgTitle">New part</h3>
+    <div class="edit-field"><label>Name</label><input name="name" required maxlength="150" autocomplete="off"></div>
+    <div id="qtyField"><label>Opening quantity</label><input name="quantity" type="number" min="0" value="0"></div>
+    <div class="edit-field"><label>Minimum (highlight when this many or fewer remain; 0 = off)</label>
+    <input name="minQuantity" type="number" min="0" value="0"></div>
+    <div class="history" id="history" hidden></div>
+    <div class="buttons">
+      <button type="button" class="btn danger edit-btn" id="deletePartBtn" hidden>Delete</button>
+      <button type="button" class="btn" value="cancel" onclick="partDlg.close()">Close</button>
+      <button class="btn primary edit-btn" value="ok">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Новий розділ -->
+<dialog id="catDlg">
+  <form method="dialog" id="catForm">
+    <h3 id="catDlgTitle">New section</h3>
+    <label>Name (e.g. Drone, GCS, Batteries)</label><input name="name" required maxlength="100" autocomplete="off">
+    <div class="buttons">
+      <button type="button" class="btn danger" id="deleteCatBtn" hidden>Delete</button>
+      <button type="button" class="btn" onclick="catDlg.close()">Cancel</button>
+      <button class="btn primary" id="catSubmit">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Користувачі (адмін) -->
+<dialog id="usersDlg">
+  <h3>Users</h3>
+  <p class="hint"><b>Admin</b> manages sections, parts and users and imports spreadsheets. <b>User</b> can only add and remove quantity.</p>
+  <div class="users" id="usersList"></div>
+  <form id="userForm" class="import-block">
+    <h4>New user</h4>
+    <div class="row-in"><input name="username" placeholder="Name" required maxlength="50" autocomplete="off">
+      <select name="role"><option value="USER">User</option><option value="ADMIN">Admin</option></select></div>
+    <div class="row-in"><input name="password" type="password" placeholder="Password (4+ characters)" required minlength="4" autocomplete="new-password">
+      <button class="btn primary">Add</button></div>
+  </form>
+  <div class="buttons"><button type="button" class="btn" onclick="usersDlg.close()">Close</button></div>
+</dialog>
+
+<!-- Імпорт (адмін) -->
+<dialog id="importDlg">
+  <h3>Import stock</h3>
+  <p class="hint">Needs <b>Part</b> and <b>Quantity</b> columns (optionally <b>Section</b> and <b>Minimum</b>). Without a Section column, the sheet name is used as the section.
+    New sections and parts are created, existing quantities are set to the sheet values. Nothing is deleted.</p>
+  <form class="import-block" id="googleForm">
+    <h4>Google Sheet</h4>
+    <p class="hint">In the sheet: Share → "Anyone with the link" → Copy link.</p>
+    <div class="row-in"><input name="url" placeholder="https://docs.google.com/spreadsheets/d/…" required autocomplete="off">
+      <button class="btn primary">Import</button></div>
+  </form>
+  <form class="import-block" id="fileForm">
+    <h4>Excel file (.xlsx)</h4>
+    <div class="row-in"><input name="file" type="file" accept=".xlsx" required><button class="btn primary">Import</button></div>
+  </form>
+  <div class="buttons"><button type="button" class="btn" onclick="importDlg.close()">Close</button></div>
+</dialog>
+
+<!-- Вхід -->
+<section id="login" hidden>
+  <form class="box" id="loginForm">
+    <h2>📦 Stock — sign in</h2>
+    <div class="names" id="loginNames"></div>
+    <input name="username" placeholder="Name" required autocomplete="username">
+    <input name="password" type="password" placeholder="Password" required autocomplete="current-password">
+    <div class="err" id="loginErr"></div>
+    <button class="btn primary">Sign in</button>
+  </form>
+</section>
+
+<!-- Перший вхід адміна: свій пароль замість admin -->
+<section id="setPw" hidden>
+  <form class="box" id="setPwForm">
+    <h2>🔑 Set the admin password</h2>
+    <p>You signed in with the default password <b>admin</b>. Choose your own password to continue.</p>
+    <input name="password" type="password" placeholder="New password (4+ characters)" required minlength="4" autocomplete="new-password">
+    <input name="repeat" type="password" placeholder="Repeat the new password" required minlength="4" autocomplete="new-password">
+    <div class="err" id="setPwErr"></div>
+    <button class="btn primary">Save password</button>
+  </form>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const state = { cats: [], current: null, parts: [], editing: null, searching: false, me: null, editingCat: null };
+
+async function api(path, opts = {}) {
+  const form = opts.body instanceof FormData;
+  const res = await fetch('/api' + path, {
+    ...opts,
+    headers: form ? { 'X-Stock': '1' } : { 'Content-Type': 'application/json', 'X-Stock': '1' },
+    body: opts.body ? (form ? opts.body : JSON.stringify(opts.body)) : undefined
+  });
+  if (res.status === 401 && path !== '/login') { showLogin(); throw new Error('Please sign in'); }
+  if (!res.ok) {
+    let msg = 'Error ' + res.status;
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// ---------- Вхід ----------
+async function showLogin() {
+  state.me = null;
+  document.body.classList.remove('admin');
+  document.querySelectorAll('dialog[open]').forEach(d => d.close());
+  const f = $('#loginForm'); f.reset(); $('#loginErr').textContent = '';
+  $('#login').hidden = false;
+  $('#setPw').hidden = true;
+  try {
+    const names = await api('/login-names');
+    $('#loginNames').innerHTML = names.map(n => `<button type="button" data-name="${esc(n)}">${esc(n)}</button>`).join('');
+  } catch {}
+}
+
+$('#loginNames').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  $('#loginNames').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+  $('#loginForm').username.value = b.dataset.name;
+  $('#loginForm').password.focus();
+});
+
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    setMe(await api('/login', { method: 'POST', body: { username: f.username.value, password: f.password.value } }));
+    $('#login').hidden = true;
+    if (state.me.defaultPassword) return showSetPw();
+    await loadCats(); await loadParts();
+  } catch (err) { $('#loginErr').textContent = err.message; f.password.value = ''; f.password.focus(); }
+});
+
+function setMe(me) {
+  state.me = me;
+  document.body.classList.toggle('admin', me.admin);
+  // Вхід вимкнено — ховаємо все, що стосується користувачів
+  document.body.classList.toggle('no-login', !me.login);
+  $('#who').innerHTML = `<b>${esc(me.username)}</b> · ${me.admin ? 'admin' : 'user'}`;
+}
+
+function showSetPw() {
+  $('#setPwForm').reset(); $('#setPwErr').textContent = '';
+  $('#setPw').hidden = false;
+  $('#setPwForm').password.focus();
+}
+
+$('#setPwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.password.value !== f.repeat.value) {
+    $('#setPwErr').textContent = 'The passwords do not match';
+    f.repeat.value = ''; return f.repeat.focus();
+  }
+  try {
+    setMe(await api('/me/password', { method: 'PUT', body: { password: f.password.value } }));
+    $('#setPw').hidden = true;
+    toast('Password saved');
+    await loadCats(); await loadParts();
+  } catch (err) { $('#setPwErr').textContent = err.message; }
+});
+
+$('#logoutBtn').addEventListener('click', async () => {
+  try { await api('/logout', { method: 'POST' }); } catch {}
+  showLogin();
+});
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---------- Розділи ----------
+async function loadCats() {
+  state.cats = await api('/categories');
+  if (!state.current || !state.cats.find(c => c.id === state.current)) state.current = state.cats[0]?.id ?? null;
+  renderCats();
+}
+
+function renderCats() {
+  $('#cats').innerHTML = state.cats.map(c => `
+    <button class="cat ${c.id === state.current && !state.searching ? 'active' : ''}" data-id="${c.id}">
+      <span>${esc(c.name)}</span><span class="count">${c.partCount}</span>
+    </button>`).join('') + `<button class="add-cat" id="addCatBtn">+ Section</button>`;
+}
+
+$('#cats').addEventListener('click', e => {
+  const b = e.target.closest('.cat');
+  if (b) { state.current = +b.dataset.id; state.searching = false; $('#search').value = ''; renderCats(); loadParts(); }
+  if (e.target.id === 'addCatBtn') openCat(null);
+});
+
+function openCat(cat) {
+  state.editingCat = cat;
+  $('#catForm').reset();
+  $('#catForm').name.value = cat ? cat.name : '';
+  $('#catDlgTitle').textContent = cat ? 'Section "' + cat.name + '"' : 'New section';
+  $('#catSubmit').textContent = cat ? 'Save' : 'Create';
+  $('#deleteCatBtn').hidden = !cat;
+  catDlg.showModal();
+}
+
+$('#editCatBtn').addEventListener('click', () => {
+  const cat = state.cats.find(c => c.id === state.current);
+  if (cat) openCat(cat);
+});
+
+$('#catForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = e.target.name.value;
+  try {
+    const c = state.editingCat
+      ? await api(`/categories/${state.editingCat.id}`, { method: 'PUT', body: { name } })
+      : await api('/categories', { method: 'POST', body: { name } });
+    catDlg.close(); state.current = c.id; await loadCats(); loadParts();
+  } catch (err) { toast(err.message); }
+});
+
+$('#deleteCatBtn').addEventListener('click', async () => {
+  const cat = state.editingCat;
+  if (!confirm(`Delete section "${cat.name}"?`)) return;
+  try { await api(`/categories/${cat.id}`, { method: 'DELETE' }); catDlg.close(); state.current = null; await loadCats(); loadParts(); }
+  catch (err) { toast(err.message); }
+});
+
+// ---------- Деталі ----------
+async function loadParts() {
+  if (state.current == null) { state.parts = []; render(); return; }
+  state.parts = await api(`/categories/${state.current}/parts`);
+  render();
+}
+
+function render() {
+  const cat = state.cats.find(c => c.id === state.current);
+  $('#title').textContent = state.searching ? 'Search results' : (cat ? cat.name : 'Create a section');
+  $('#addPartBtn').disabled = !cat || state.searching;
+  $('#editCatBtn').hidden = !cat || state.searching;
+  if (!state.parts.length) {
+    $('#parts').innerHTML = `<div class="empty">${state.searching ? 'Nothing found' : 'Nothing here yet — add the first part'}</div>`;
+    return;
+  }
+  const catName = id => state.cats.find(c => c.id === id)?.name ?? '';
+  $('#parts').innerHTML = `<div class="row head"><span>Part</span><span style="text-align:center">Qty</span><span>Actions</span></div>` +
+    state.parts.map(p => `
+    <div class="row ${p.quantity === 0 ? 'zero' : p.low ? 'low' : ''}" data-id="${p.id}">
+      <div class="name" data-act="edit">${esc(p.name)}${state.searching ? `<small>${esc(catName(p.categoryId))}</small>` : ''}</div>
+      <div class="qty">${p.quantity}</div>
+      <div class="actions">
+        <button class="plus" data-act="plus" aria-label="Add">+</button>
+        <button class="minus" data-act="minus" aria-label="Remove" ${p.quantity === 0 ? 'disabled' : ''}>−</button>
+        <button class="more" data-act="edit" aria-label="Details">⋯</button>
+      </div>
+    </div>`).join('');
+}
+
+$('#parts').addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const id = +el.closest('.row').dataset.id;
+  const act = el.dataset.act;
+  if (act === 'edit') return openEdit(id);
+  const step = Math.max(1, parseInt($('#step').value) || 1);
+  try {
+    const updated = await api(`/parts/${id}/adjust`, { method: 'POST', body: { delta: act === 'plus' ? step : -step } });
+    state.parts = state.parts.map(p => p.id === id ? updated : p);
+    render();
+  } catch (err) { toast(err.message); }
+});
+
+$('#addPartBtn').addEventListener('click', () => {
+  state.editing = null;
+  $('#partForm').reset();
+  $('#partDlgTitle').textContent = 'New part';
+  $('#qtyField').hidden = false; $('#deletePartBtn').hidden = true; $('#history').hidden = true;
+  partDlg.classList.remove('readonly');
+  partDlg.showModal();
+});
+
+async function openEdit(id) {
+  const p = state.parts.find(x => x.id === id);
+  state.editing = p;
+  const f = $('#partForm');
+  f.name.value = p.name; f.minQuantity.value = p.minQuantity;
+  $('#partDlgTitle').textContent = p.name;
+  $('#qtyField').hidden = true; $('#deletePartBtn').hidden = false;
+  partDlg.classList.toggle('readonly', !state.me?.admin);
+  const h = $('#history'); h.hidden = false; h.innerHTML = '<div>Loading history…</div>';
+  partDlg.showModal();
+  const items = await api(`/parts/${id}/history?limit=30`);
+  h.innerHTML = items.length ? items.map(m => `
+    <div><span>${new Date(m.createdAt).toLocaleString('en-GB')}${m.username ? ' · ' + esc(m.username) : ''}${m.note ? ' · ' + esc(m.note) : ''}</span>
+    <span><span class="${m.delta > 0 ? 'pos' : 'neg'}">${m.delta > 0 ? '+' : ''}${m.delta}</span> → ${m.quantityAfter}</span></div>`).join('')
+    : '<div>No history yet</div>';
+}
+
+$('#partForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    if (state.editing) {
+      await api(`/parts/${state.editing.id}`, { method: 'PUT', body: { name: f.name.value, minQuantity: +f.minQuantity.value || 0 } });
+    } else {
+      await api('/parts', { method: 'POST', body: {
+        categoryId: state.current, name: f.name.value, quantity: +f.quantity.value || 0, minQuantity: +f.minQuantity.value || 0 } });
+    }
+    partDlg.close(); await loadCats(); state.searching ? doSearch() : loadParts();
+  } catch (err) { toast(err.message); }
+});
+
+$('#deletePartBtn').addEventListener('click', async () => {
+  if (!confirm(`Delete "${state.editing.name}" and its history?`)) return;
+  try { await api(`/parts/${state.editing.id}`, { method: 'DELETE' }); partDlg.close(); await loadCats(); loadParts(); }
+  catch (err) { toast(err.message); }
+});
+
+// ---------- Пошук ----------
+let searchTimer;
+async function doSearch() {
+  const q = $('#search').value.trim();
+  if (!q) { state.searching = false; renderCats(); return loadParts(); }
+  state.searching = true; renderCats();
+  state.parts = await api('/parts?q=' + encodeURIComponent(q));
+  render();
+}
+$('#search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(doSearch, 250); });
+
+// ---------- Експорт / імпорт ----------
+$('#exportBtn').addEventListener('click', () => {
+  window.location = '/api/export.xlsx';
+  toast('.xlsx file saved. In Google Sheets: File → Import → Upload');
+});
+
+$('#importBtn').addEventListener('click', () => {
+  $('#fileForm').reset();
+  try { $('#googleForm').url.value = localStorage.getItem('stock.googleUrl') || ''; } catch {}
+  importDlg.showModal();
+});
+
+async function runImport(promise) {
+  try {
+    const r = await promise;
+    importDlg.close();
+    toast(`Import: ${r.categoriesCreated} new sections, ${r.partsCreated} new parts, ${r.partsUpdated} updated` +
+          (r.rowsSkipped ? `, ${r.rowsSkipped} rows skipped` : ''));
+    await loadCats(); loadParts();
+  } catch (err) { toast(err.message); }
+}
+
+$('#googleForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const url = e.target.url.value.trim();
+  try { localStorage.setItem('stock.googleUrl', url); } catch {}
+  toast('Downloading from Google…');
+  runImport(api('/import/google', { method: 'POST', body: { url } }));
+});
+
+$('#fileForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const fd = new FormData(); fd.append('file', e.target.file.files[0]);
+  runImport(api('/import/file', { method: 'POST', body: fd }));
+});
+
+// ---------- Користувачі ----------
+async function openUsers() {
+  $('#userForm').reset();
+  if (!usersDlg.open) usersDlg.showModal();
+  const list = await api('/users').catch(err => { toast(err.message); return []; });
+  $('#usersList').innerHTML = list.map(u => `
+    <div class="u" data-id="${u.id}">
+      <b>${esc(u.username)}</b>
+      <select data-act="role">
+        <option value="USER" ${u.role === 'USER' ? 'selected' : ''}>User</option>
+        <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>Admin</option>
+      </select>
+      <div class="ctrl">
+        <input type="password" placeholder="New password" minlength="4" autocomplete="new-password">
+        <button class="btn" data-act="pass">Change</button>
+        <button class="btn danger" data-act="del" ${u.username === state.me.username ? 'disabled' : ''}>✕</button>
+      </div>
+    </div>`).join('');
+}
+$('#usersBtn').addEventListener('click', openUsers);
+
+$('#usersList').addEventListener('change', async e => {
+  if (e.target.dataset.act !== 'role') return;
+  const id = e.target.closest('.u').dataset.id;
+  try { await api(`/users/${id}`, { method: 'PUT', body: { role: e.target.value } }); toast('Role changed'); }
+  catch (err) { toast(err.message); }
+  openUsers();
+});
+
+$('#usersList').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const row = b.closest('.u'), id = row.dataset.id, name = row.querySelector('b').textContent;
+  try {
+    if (b.dataset.act === 'pass') {
+      const pw = row.querySelector('input').value;
+      if (pw.length < 4) return toast('Password must be 4+ characters');
+      await api(`/users/${id}`, { method: 'PUT', body: { password: pw } });
+      toast('Password changed for ' + name);
+      setMe(await api('/me'));
+    } else if (b.dataset.act === 'del') {
+      if (!confirm(`Delete user "${name}"?`)) return;
+      await api(`/users/${id}`, { method: 'DELETE' });
+    }
+    openUsers();
+  } catch (err) { toast(err.message); }
+});
+
+$('#userForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    await api('/users', { method: 'POST', body: { username: f.username.value, password: f.password.value, role: f.role.value } });
+    toast('Added: ' + f.username.value);
+    openUsers();
+  } catch (err) { toast(err.message); }
+});
+
+// ---------- Вийти ----------
+$('#quitBtn').addEventListener('click', async () => {
+  if (!confirm('Close the Stock app?')) return;
+  try {
+    await api('/shutdown', { method: 'POST' });
+    clearInterval(refreshTimer);
+    window.close();
+    document.body.innerHTML = '<div style="display:grid;place-items:center;height:100vh;text-align:center">' +
+      '<div><h2>App closed</h2><p style="color:var(--muted)">Close this window. To open it again, use the Stock icon on the desktop.</p></div></div>';
+  } catch (err) { toast(err.message); }
+});
+
+// Автооновлення, якщо хтось інший змінив кількість з іншого пристрою
+const refreshTimer = setInterval(() => {
+  if (state.me && !document.hidden && !document.querySelector('dialog[open]')) (state.searching ? doSearch() : loadParts()).catch(() => {});
+}, 10000);
+
+api('/me').then(me => { setMe(me); if (me.defaultPassword) return showSetPw(); return loadCats().then(loadParts); }).catch(err => { if (!state.me) return; toast(err.message); });
+</script>
+</body>
+</html>
